@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+	<xml fileName="Dispatcher.xml"/>
+	<Empresa>
+		<author>Johnny Xavier Zurita Medranda</author>
+		<config>
+			<encrypted>resources/dispatcher_e.dat</encrypted>
+			<key>resources/dispatcher_k.dat</key>
+		</config>
+		<postgreSQL>
+			<driver>org.postgresql.Driver</driver>
+			<fac_electronica>
+				<database>fac_electronica</database>
+			    <urlDesa>jdbc:postgresql://192.168.0.210:5432/fac_electronica</urlDesa>
+			    <url>jdbc:postgresql://localhost:5432/fac_electronica</url>
+				<user>fac_electronica</user>
+				<password>fac_electronica7777</password>
+				<reintentos_base>3</reintentos_base>
+			</fac_electronica>
+		</postgreSQL>				
+		<SQLServer>
+			<driver>com.microsoft.sqlserver.jdbc.SQLServerDriver</driver>
+			<Empresa>
+				<database>cicf10</database>
+			    <urlDesa>jdbc:sqlserver://ZEUS\GARZOTA</urlDesa>
+			    <!--  <url>jdbc:sqlserver://ZEUS\GARZOTA:1433;databasename=cicf10</url>-->
+			    <userSchemaDb>cicf10.dbo.</userSchemaDb>
+			    <url>jdbc:sqlserver://localhost:1433;databaseName=cicf10</url>  
+				<user>sa</user>
+				<password>123</password>
+				<reintentos_base>3</reintentos_base>
+				<entorno>PRUEBA</entorno>
+				<entorno_secuencia>001</entorno_secuencia>
+				<sql>   
+				<UpdateEstadoTrx>update [ESQUEMA]TblPvCabMovimiento set CSnAutorizado = ? where NidPvMovimiento = ?</UpdateEstadoTrx>
+				<insertFactElectronicaTmp>INSERT INTO [ESQUEMA]TblFacElectronicaTmp (NIdPvMovimiento,CCiTipoDocumento,CSnEstado,DFxIngreso) VALUES(?,?,?,getdate())</insertFactElectronicaTmp>			  
+    			<getTrx><![CDATA[
+				Select Top 100 
+  						cnusecuencia as secuencial,
+					NIdPvMovimiento as idmovimiento,
+					--convert(varchar, DfxEmision, 103) as fechaEmision,
+					convert(varchar, GETDATE(), 103) as fechaEmision,
+					CCiTipoDocumento as tipoDocumento,
+					CCiSucursal, 
+					CciPtoEmision
+					--,CSnAutorizado
+				from --tblpvcabmovimiento x
+				[ESQUEMA]tblpvcabmovimiento x
+				where 
+				  CCiTipoDocumento in([TIPO_DOCUMENTO]) 
+				  and (CSnAutorizado is null or CSnAutorizado = ' ') 
+				  and cnusecuencia is not null
+				  and cnusecuencia <> ''
+				  and cciSucursal = '11'
+				  and cciSucursal = ?
+				  --and DfxEmision >= '2014-08-10'	
+				  and DfxEmision >= GETDATE()-1
+				  and NIdPvMovimiento not in 
+						(select NIdPvMovimiento
+							from [ESQUEMA]TblFacElectronicaTmp a 
+						 where a.NIdPvMovimiento = x.NIdPvMovimiento )			  
+				  order by NIdPvMovimiento asc
+				]]></getTrx>   
+	    		<InfoTributariaXmlTrx><![CDATA[
+				Select	convert(varchar, GETDATE(), 103) as fechaEmision, 
+						x.CCiIdentificacion as codigoCliente, 
+						CASE WHEN c.CCiTipoIdentificacion = 'F' THEN 'CONSUMIDOR FINAL' ELSE c.CNoCliente END as nombreCliente,
+						CASE WHEN c.CCiTipoIdentificacion = 'F' THEN '9999999999999' ELSE c.CCiIdentificacion END  as identificacionComprador, 
+						CASE WHEN c.CCiTipoIdentificacion = 'P' THEN '09'
+						WHEN c.CCiTipoIdentificacion = 'C' THEN '05' 
+							WHEN c.CCiTipoIdentificacion = 'R' THEN '04' 
+								WHEN c.CCiTipoIdentificacion = 'F' THEN '07' ELSE '07' END AS tipoIdentificacionComprador,
+						COALESCE(CASE WHEN CDsEmail1 = '' THEN null ELSE CDsEmail1 END ,
+						COALESCE(CASE WHEN CDsEmail2  = '' THEN null ELSE CDsEmail2 END,'notiene')) as emailCliente, 
+						round(nvtsubtotalneto,2) as totalSinImpuesto, 
+						round(nvtdescuento,2) as totalDescuento, 0 as propina, 
+						round(nvttotalpagar,2) as importeTotal, 
+						CASE WHEN nvtiva > 0 THEN 1 ELSE 0 END as tieneIva, 
+						nnuporciva, 
+						'DOLAR' moneda, 
+						round(nvttotalpagar,2) totalImpuestosIva,
+						c.CDsDireccion as direccion, 
+						COALESCE(c.CNuTelefono1,c.CNuTelefono2) as telefono, 
+						cnusecuencia as secuencial,
+						NIdPvMovimiento as idmovimiento, 
+						CCiTipoDocumento as tipoDocumento
+					from tblpvcabmovimiento x, 
+						(Select CCiIdentificacion, 
+								CCiTipoIdentificacion, 
+								CNoCliente, CDsEmail1, 
+								CDsEmail2, CDsDireccion, 
+								CNuTelefono1, CNuTelefono2
+						 from TblGeCliente 
+						 union 
+						 Select CCiIdentificacionEmplCorp, 
+								CCiTipoIdentificacionEmplCorp, 
+								CNoEmpleadoCorp, null , null,
+								CDsDireccion, 
+								CNuTelefono, null 
+						 from TblPvEmpleadoCorporativo 
+						 where CCeTarjeta = 'A') c 
+					 where CCiSucursal = ?
+					 and CciPtoEmision = ?
+					 and NIdPvMovimiento  = ?
+					 and CNuSecuencia = ?
+					 and CCiTipoDocumento = ?
+					 and x.CCiIdentificacion = c.CCiIdentificacion 
+					 --and (CSnAutorizado is null or CSnAutorizado = ' ') 
+					 and cnusecuencia is not null 
+					 and cnusecuencia <> ''
+					]]></InfoTributariaXmlTrx>
+					<InfoNotaTributariaXmlTrx><![CDATA[
+					Select	convert(varchar, GETDATE(), 103) as fechaEmision, 
+						x.CCiIdentificacion as codigoCliente, 
+						CASE WHEN c.CCiTipoIdentificacion = 'F' THEN 'CONSUMIDOR FINAL' ELSE c.CNoCliente END as nombreCliente,
+						CASE WHEN c.CCiTipoIdentificacion = 'F' THEN '9999999999999' ELSE c.CCiIdentificacion END  as identificacionComprador, 
+						CASE WHEN c.CCiTipoIdentificacion = 'P' THEN '09'
+						WHEN c.CCiTipoIdentificacion = 'C' THEN '05' 
+						WHEN c.CCiTipoIdentificacion = 'R' THEN '04' 
+						WHEN c.CCiTipoIdentificacion = 'F' THEN '07' ELSE '07' END AS tipoIdentificacionComprador,
+						COALESCE(CASE WHEN CDsEmail1 = '' THEN null ELSE CDsEmail1 END ,
+						COALESCE(CASE WHEN CDsEmail2  = '' THEN null ELSE CDsEmail2 END,'notiene')) as emailCliente, 
+						round(nvtsubtotalneto,2) as totalSinImpuesto, 
+						round(nvtdescuento,2) as totalDescuento, 0 as propina, 
+						round(nvttotalpagar,2) as importeTotal, 
+						CASE WHEN nvtiva > 0 THEN 1 ELSE 0 END as tieneIva, 
+						nnuporciva, 'DOLAR' moneda, 
+						round(nvtsubtotalbaseiva,2) totalImpuestosIva,
+						c.CDsDireccion as direccion, 
+						COALESCE(c.CNuTelefono1,c.CNuTelefono2) as telefono, 
+						cnusecuencia as secuencial,
+						NIdPvMovimiento as idmovimiento, 
+						CCiTipoDocumento as tipoDocumento, 
+						'' as motivo,
+						(Select	t.CCiTipoDocumento 
+							from  tblpvcabmovimiento t 
+							where t.NIdPvMovimiento = x.NIdPvMovimientoOrigen) as codDocModificado,
+						(Select (SUBSTRING (t.CNuSerie,1,3)+'-'+SUBSTRING (t.CNuSerie,4,3)+'-'+t.CNuSecuencia)  
+							from  tblpvcabmovimiento t 
+							where t.NIdPvMovimiento = x.NIdPvMovimientoOrigen) as numDocModificado,
+						(Select convert(varchar, t.DFxEmision, 103) 
+							from  tblpvcabmovimiento t 
+							where t.NIdPvMovimiento = x.NIdPvMovimientoOrigen) as fechaEmisionDocSustento 
+					from tblpvcabmovimiento x, 
+						(Select CCiIdentificacion, 
+								CCiTipoIdentificacion, 
+								CNoCliente, 
+								CDsEmail1, 
+								CDsEmail2, 
+								CDsDireccion, 
+								CNuTelefono1, 
+								CNuTelefono2 
+							from TblGeCliente 
+						union 
+						 Select CCiIdentificacionEmplCorp, 
+								CCiTipoIdentificacionEmplCorp, 
+								CNoEmpleadoCorp, null , null,
+								CDsDireccion, 
+								CNuTelefono, null 
+							from TblPvEmpleadoCorporativo where CCeTarjeta = 'A') c 
+					where CCiSucursal = ? 
+					and CciPtoEmision = ? 
+					and NIdPvMovimiento  = ? 
+					and CNuSecuencia = ? 
+					and CCiTipoDocumento = ? 
+					and x.CCiIdentificacion = c.CCiIdentificacion 
+					and (CSnAutorizado is null or CSnAutorizado = ' ')  
+					and cnusecuencia is not null 
+					and cnusecuencia <> ''
+				]]></InfoNotaTributariaXmlTrx>
+    			<getTotalImpuestoTrxInfoFactura><![CDATA[
+				Select	'2', 
+						CASE WHEN CSnGrabaIva = 'S' THEN '2' 
+							 WHEN CSnGrabaIva = 'N' THEN '0' END AS codigoPorcentaje, 
+						round(sum(NVtTotalPagar),2) as baseImponible, 
+						round(Sum(NVtIva),2) as valor, 
+						CSnGrabaIva 
+					from TblPvDetMovimiento 
+				where NIdPvMovimiento  = ?
+				group by CSnGrabaIva
+				]]></getTotalImpuestoTrxInfoFactura>
+    			<getDetalleTrxInfoFactura><![CDATA[
+				Select	d.CCiProducto as codigoPrincipal,
+						CNoProducto as descripcion,
+						d.NNuCantidad as cantidad,
+						round(d.NVtPrecioUnitario,2) as PrecioUnitario,
+						round(d.NVtDsctoProducto,2) as descuento,
+						round(d.NVtSubTotal-NVtDsctoProducto,2) as precioTotalSinImpuesto,
+						d.NNuSecuencia as secuencia 
+					from TblPvDetMovimiento d,
+						 tblivproducto p 
+				where d.CCiProducto=p.CCiProducto 
+				and NIdPvMovimiento=?
+				]]></getDetalleTrxInfoFactura>
+    			<getNotaDetalleTrxInfoFactura>Select d.CCiProducto as codigoPrincipal,CNoProducto as descripcion,round(d.NNuCantidad,2) as cantidad,round(d.NVtPrecioUnitario,2) as PrecioUnitario,round(d.NVtDsctoProducto,2) as descuento,round(d.NVtSubTotal,2) as precioTotalSinImpuesto,d.NNuSecuencia as secuencia from TblPvDetMovimiento d,tblivproducto p where d.CCiProducto=p.CCiProducto and NIdPvMovimiento=?</getNotaDetalleTrxInfoFactura>
+    			<getDetalleTrxInfoFacturaImp><![CDATA[
+				Select	'2', 
+						CASE WHEN CSnGrabaIva = 'S' THEN '2' 
+							 WHEN CSnGrabaIva = 'N' THEN '0' END AS codigoPorcentaje, 
+						CASE WHEN CSnGrabaIva = 'S' THEN (cast (nnuporciva as integer)) 
+							 WHEN CSnGrabaIva = 'N' THEN '0' END AS tarifa,
+						round(sum(NVtTotalPagar),2) as baseImponible,  
+						round(Sum(NVtIva),2)  as valor,
+						CCiProducto
+					from TblPvDetMovimiento 
+				where NIdPvMovimiento  = ?
+					  and CCiProducto = ? 
+					  and NNuSecuencia = ?
+				group by CSnGrabaIva 
+						 ,nnuporciva 
+						 ,CCiProducto
+    			]]></getDetalleTrxInfoFacturaImp>
+    			</sql>		
+			</Empresa>
+			<Invoice>
+				<database>Invoice</database>
+			    <url>jdbc:sqlserver://localhost:1433;databaseName=Invoice</url>
+				<user>sa</user>
+				<password>123</password>
+				<reintentos_base>3</reintentos_base>
+			</Invoice>
+		</SQLServer>		
+		<service>
+			<request>
+					<hilos>
+						<cantidad_ejecucion>1</cantidad_ejecucion> <!-- numero de hilos a ejecutarse en el proceso de hilos -->
+					</hilos>
+			</request>
+			<facturacion>
+			<tiposDocumento><!-- Informacion sacada de la tabla folio$_type de opera -->
+			 	<FACTURAS>01</FACTURAS>
+			 	<FACTURAST>01</FACTURAST>
+			 	<NCREDITO>04</NCREDITO>
+			 	<NCREDITOT>04</NCREDITOT>
+		    </tiposDocumento>	
+				<getTrx>
+				    <!--<statusInicial>OK</statusInicial>-->
+				    <sleepBloque>1000</sleepBloque>
+				    <tiposDocumentos>'01','04'</tiposDocumentos>
+				    <rownumBloque>100</rownumBloque>
+				</getTrx>		    	 	
+		    </facturacion>
+		    <facElectronica>
+		    	<version>1.1.0</version>
+		    	<ambiente>
+		 			<doc01>0</doc01>
+		 		</ambiente>
+		    	<tipoEmision>1</tipoEmision><!-- Tipo de Emision 1 Emision Normal / 2 Emision por indisponibilidad del Sistema -->
+		    	<tiposDocumentoEtiquetaXml><!-- Informacion sacada de la tabla folio$_type de opera -->
+			 	<doc01>factura</doc01>
+		    	<doc04>notaCredito</doc04>
+			 	<doc05>notaDebito</doc05>
+			 	<doc06>guiaRemision</doc06>
+			 	<doc07>comprobanteRetencion</doc07>
+		    	</tiposDocumentoEtiquetaXml>
+		    	<infoTributaria>
+					<ambiente><documentos>01,04,05,06,07</documentos></ambiente>
+				</infoTributaria>				
+		    </facElectronica>
+		</service>
+		<alarm>
+			<sms>
+				<enable>N</enable>
+				<ip></ip>
+				<port></port>
+				<sender></sender>
+				<receivers-list></receivers-list>
+			</sms>
+			<email>
+				<enable>Y</enable>
+				<!--<host>192.168.32.172</host>-->
+				<host>mail.cimait.com.ec</host>
+				<sender>OroVerdeService@cimait.com.ec</sender>
+				<receivers-list>jzurita@cimait.com.ec;</receivers-list>
+				<subject>Proceso de Despacho de Transacciones Opera</subject>
+				<final-message>Por favor, verificar  ::  Ojo pruebas. </final-message>
+				<time-mail>10</time-mail>
+			</email>
+			<sleep-min>5</sleep-min>
+			<overtime-alarm>
+				<packageRecharge>1000</packageRecharge>
+			</overtime-alarm>
+		</alarm>
+		<OROGYE>
+			<Query-Principal></Query-Principal>
+		</OROGYE>
+		<command>
+			<time-out>40000</time-out>
+		</command>		
+		<log>
+		    <control>log4j.xml</control>
+		</log>
+		<ctrl-on-off>
+			<file>Dispatcher.ctr</file>
+		</ctrl-on-off>	
+	</Empresa>
+</configuration>
